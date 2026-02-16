@@ -1,0 +1,11 @@
+.env
+__pycache__
+.venv
+venv
+wallet.db
+node_modules
+frontend/dist
+*.pyc
+.pytest_cache
+.coverage
+htmlcov
