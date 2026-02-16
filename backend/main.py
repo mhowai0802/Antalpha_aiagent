@@ -44,6 +44,7 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         *([os.getenv("FRONTEND_URL")] if os.getenv("FRONTEND_URL") else []),
     ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
