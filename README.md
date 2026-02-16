@@ -148,6 +148,28 @@ You can deploy the full app for **$0/month** using Vercel (frontend) + Render (b
    - `VITE_API_URL` = your Render backend URL (e.g. `https://crypto-agent-backend.onrender.com`)
 6. Deploy. Your demo is live!
 
+### CLI Deployment (Alternative)
+
+Install the CLIs first:
+
+```bash
+brew install render          # Render CLI
+npm install -g vercel        # Vercel CLI
+```
+
+Then run the deploy script:
+
+```bash
+# Deploy both backend and frontend
+./deploy.sh
+
+# Or deploy individually
+./deploy.sh backend
+./deploy.sh frontend
+```
+
+The script handles authentication, environment variables, and deployment. For Render, the very first deployment still requires a one-time Blueprint setup via the dashboard (the script will guide you).
+
 ### After Both Are Deployed
 
 Go back to Render and set `FRONTEND_URL` to your Vercel URL so CORS works correctly.
