@@ -115,6 +115,43 @@ curl http://localhost:8000/balance/user_default
 curl http://localhost:8000/transactions/user_default
 ```
 
+## Deploy as Demo (Free Tier)
+
+You can deploy the full app for **$0/month** using Vercel (frontend) + Render (backend) + MongoDB Atlas M0 (database).
+
+### Backend → Render
+
+1. Push this repo to GitHub.
+2. Go to [render.com](https://render.com) and sign in with GitHub.
+3. Click **New → Web Service**, connect this repo.
+4. Render will auto-detect `render.yaml` — confirm the settings:
+   - **Root Directory**: `backend`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+5. Set the secret environment variables in the Render dashboard:
+   - `HKBU_API_KEY` — your HKBU GenAI API key
+   - `MONGODB_URI` — your MongoDB Atlas connection string
+   - `FRONTEND_URL` — your Vercel URL (set after deploying frontend, e.g. `https://your-app.vercel.app`)
+6. Deploy. Note your backend URL (e.g. `https://crypto-agent-backend.onrender.com`).
+
+> **Note**: Render free tier sleeps after 15 min of inactivity. First request after sleep takes ~30-50s to spin up — acceptable for a demo.
+
+### Frontend → Vercel
+
+1. Go to [vercel.com](https://vercel.com) and sign in with GitHub.
+2. Click **Add New → Project**, import this repo.
+3. Set **Root Directory** to `frontend`.
+4. Vercel auto-detects Vite. Confirm:
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+5. Add environment variable:
+   - `VITE_API_URL` = your Render backend URL (e.g. `https://crypto-agent-backend.onrender.com`)
+6. Deploy. Your demo is live!
+
+### After Both Are Deployed
+
+Go back to Render and set `FRONTEND_URL` to your Vercel URL so CORS works correctly.
+
 ## Tech Stack
 
 - **Backend**: FastAPI, LangChain, CCXT, MongoDB, HKBU GenAI (gemini-2.5-flash)

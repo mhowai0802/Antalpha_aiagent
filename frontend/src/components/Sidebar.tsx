@@ -1,6 +1,6 @@
 import type { Page } from '../App';
 import type { LucideIcon } from 'lucide-react';
-import { MessageSquare, Wallet, ArrowLeftRight, X, User } from 'lucide-react';
+import { MessageSquare, Wallet, ArrowLeftRight, GitBranch, X, User } from 'lucide-react';
 import './Sidebar.scss';
 
 interface Props {
@@ -14,6 +14,7 @@ const items: { id: Page; label: string; icon: LucideIcon }[] = [
   { id: 'chat', label: 'Chat', icon: MessageSquare },
   { id: 'wallet', label: 'Wallet', icon: Wallet },
   { id: 'transactions', label: 'Transactions', icon: ArrowLeftRight },
+  { id: 'architecture', label: 'How It Works', icon: GitBranch },
 ];
 
 const USER_ID = 'user_default';

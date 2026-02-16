@@ -42,6 +42,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
+        *([os.getenv("FRONTEND_URL")] if os.getenv("FRONTEND_URL") else []),
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -111,5 +112,5 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=int(os.getenv("PORT", 8000)),
-        reload=True,
+        reload=os.getenv("ENV", "development") != "production",
     )
