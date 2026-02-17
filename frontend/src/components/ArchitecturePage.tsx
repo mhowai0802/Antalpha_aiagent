@@ -6,6 +6,7 @@ import {
   ShoppingCart,
   Wallet,
   ClipboardList,
+  Globe,
 } from 'lucide-react';
 import './ArchitecturePage.scss';
 
@@ -16,7 +17,7 @@ const highLevelChart = `flowchart TD
   Agent["AI Agent (LangChain + Gemini)"]
   Tools["Agent Tools"]
   CCXT["MCP Client (CCXT)"]
-  Binance["Binance Exchange"]
+  Exchange["Crypto Exchange (Kraken/Binance)"]
   DB["MongoDB Database"]
 
   User -->|"Type a message"| UI
@@ -24,8 +25,8 @@ const highLevelChart = `flowchart TD
   API -->|"Pass to agent"| Agent
   Agent -->|"Pick the right tool"| Tools
   Tools -->|"Need market data?"| CCXT
-  CCXT -->|"Fetch live prices"| Binance
-  Binance -->|"Price data"| CCXT
+  CCXT -->|"Fetch live prices"| Exchange
+  Exchange -->|"Price data"| CCXT
   CCXT -->|"Return data"| Tools
   Tools -->|"Need wallet data?"| DB
   DB -->|"Balance / history"| Tools
@@ -42,7 +43,7 @@ const chatFlowChart = `sequenceDiagram
   participant LLM as Gemini LLM
   participant Tool as Price Tool
   participant CCXT as CCXT Client
-  participant Binance as Binance
+  participant Exchange as Exchange
 
   You->>UI: "What is the price of BTC?"
   UI->>API: POST /chat
@@ -50,12 +51,12 @@ const chatFlowChart = `sequenceDiagram
   Agent->>LLM: Understand intent
   LLM->>Tool: Call get_crypto_price
   Tool->>CCXT: get_ticker("BTC")
-  CCXT->>Binance: Fetch BTC/USDT price
-  Binance-->>CCXT: $45,123.45
+  CCXT->>Exchange: Fetch BTC/USDT price
+  Exchange-->>CCXT: $68,887.90
   CCXT-->>Tool: Formatted price data
-  Tool-->>LLM: "BTC is $45,123.45"
+  Tool-->>LLM: "BTC is $68,887.90"
   LLM-->>Agent: Compose reply
-  Agent-->>API: "Bitcoin is trading at $45,123"
+  Agent-->>API: "Bitcoin is trading at $68,887"
   API-->>UI: JSON response
   UI-->>You: Display formatted answer`;
 
@@ -66,7 +67,7 @@ const buyFlowChart = `sequenceDiagram
   participant Agent as AI Agent
   participant BuyTool as Buy Tool
   participant CCXT as CCXT Client
-  participant Binance as Binance
+  participant Exchange as Exchange
   participant DB as MongoDB
 
   You->>UI: "Buy $100 of ETH"
@@ -74,26 +75,51 @@ const buyFlowChart = `sequenceDiagram
   API->>Agent: Process message
   Agent->>BuyTool: buy_crypto("ETH", 100)
   BuyTool->>CCXT: Get current ETH price
-  CCXT->>Binance: Fetch ETH/USDT
-  Binance-->>CCXT: $3,200.50
-  CCXT-->>BuyTool: price = $3,200.50
-  Note over BuyTool: Calculate: $100 / $3200.50 = 0.03125 ETH
-  BuyTool->>DB: Deduct $100 USD, add 0.03125 ETH
+  CCXT->>Exchange: Fetch ETH/USDT
+  Exchange-->>CCXT: $1,972.25
+  CCXT-->>BuyTool: price = $1,972.25
+  Note over BuyTool: Calculate: $100 / $1972.25 = 0.05070 ETH
+  BuyTool->>DB: Deduct $100 USD, add 0.05070 ETH
   DB-->>BuyTool: Wallet updated
   BuyTool->>DB: Record transaction
   DB-->>BuyTool: Transaction saved
-  BuyTool-->>Agent: "Bought 0.03125 ETH at $3,200.50"
+  BuyTool-->>Agent: "Bought 0.05070 ETH at $1,972.25"
   Agent-->>API: Natural language confirmation
   API-->>UI: JSON response
   UI-->>You: Show confirmation
   Note over UI: Auto-refresh wallet and transactions`;
+
+const deploymentChart = `flowchart LR
+  subgraph user [User]
+    Browser["Browser"]
+  end
+
+  subgraph vercel [Vercel - Free Tier]
+    Frontend["React Static Build"]
+  end
+
+  subgraph render [Render - Free Tier]
+    Backend["FastAPI + LangChain"]
+  end
+
+  subgraph external [External Services]
+    Exchange["Kraken API"]
+    MongoDB["MongoDB Atlas M0"]
+    GenAI["HKBU GenAI API"]
+  end
+
+  Browser -->|"HTTPS"| Frontend
+  Frontend -->|"VITE_API_URL"| Backend
+  Backend -->|"CCXT"| Exchange
+  Backend -->|"pymongo"| MongoDB
+  Backend -->|"langchain-openai"| GenAI`;
 
 const tools = [
   {
     icon: Search,
     name: 'Get Crypto Price',
     description:
-      'Fetches the real-time price of any cryptocurrency from Binance. Ask "What is the price of BTC?" and this tool gets the live data.',
+      'Fetches the real-time price of any cryptocurrency from the exchange (Kraken in production, Binance locally). Ask "What is the price of BTC?" and this tool gets the live data.',
   },
   {
     icon: BookOpen,
@@ -156,8 +182,9 @@ export default function ArchitecturePage() {
               <div className="arch-step">
                 <div className="arch-step__number">3</div>
                 <div className="arch-step__content">
-                  <strong>Real data, simulated trades</strong> &mdash; Prices come from Binance (real!),
-                  but trades happen in a simulated wallet (no real money). You start with $10,000.
+                  <strong>Real data, simulated trades</strong> &mdash; Prices come from a real exchange
+                  (Kraken in production, Binance locally), but trades happen in a simulated wallet
+                  (no real money). You start with $10,000.
                 </div>
               </div>
               <div className="arch-step">
@@ -175,30 +202,36 @@ export default function ArchitecturePage() {
         <section className="arch-section">
           <h2 className="arch-section__title">System Architecture</h2>
           <p className="arch-text arch-text--muted">
-            The app has three main layers: the <strong>frontend</strong> (what you see),
-            the <strong>backend</strong> (the AI brain), and <strong>external services</strong> (Binance
-            for prices, MongoDB for your wallet).
+            The flowchart below shows how data flows through the entire system.
+            Follow the arrows from top to bottom &mdash; your message travels through
+            each layer, and the response comes back the same way.
           </p>
           <div className="arch-card arch-card--diagram">
             <Mermaid chart={highLevelChart} />
           </div>
           <div className="arch-card">
+            <p className="arch-text" style={{ marginBottom: 12 }}>
+              <strong>Reading the flowchart:</strong> Each box is a component of the system.
+              Arrows show the direction of data flow, and labels describe what data is being passed.
+              The left side handles <em>market data</em> (prices from the exchange), while the right
+              side handles <em>user data</em> (wallet and transactions from MongoDB).
+            </p>
             <div className="arch-legend">
               <div className="arch-legend__item">
                 <span className="arch-legend__dot arch-legend__dot--blue" />
-                <span><strong>Frontend</strong> &mdash; React app running in your browser. Handles the chat UI, wallet display, and transaction history.</span>
+                <span><strong>Frontend</strong> &mdash; React app running in your browser (hosted on Vercel). Handles the chat UI, wallet display, and transaction history. Communicates with the backend via REST API calls.</span>
               </div>
               <div className="arch-legend__item">
                 <span className="arch-legend__dot arch-legend__dot--green" />
-                <span><strong>Backend</strong> &mdash; Python server with an AI agent powered by LangChain and Gemini 2.5 Flash. Decides what to do with your message.</span>
+                <span><strong>Backend + AI Agent</strong> &mdash; Python FastAPI server (hosted on Render) with a LangChain agent powered by Gemini 2.5 Flash. The agent interprets your natural language and decides which tool to call.</span>
               </div>
               <div className="arch-legend__item">
                 <span className="arch-legend__dot arch-legend__dot--orange" />
-                <span><strong>MCP Client (CCXT)</strong> &mdash; A wrapper around the CCXT library that connects to Binance to fetch real-time cryptocurrency prices.</span>
+                <span><strong>MCP Client (CCXT)</strong> &mdash; A wrapper around the CCXT library that connects to the exchange. The exchange is configurable &mdash; Kraken in production (US-friendly), Binance locally (Asia). No API key needed for public price data.</span>
               </div>
               <div className="arch-legend__item">
                 <span className="arch-legend__dot arch-legend__dot--purple" />
-                <span><strong>MongoDB</strong> &mdash; Cloud database that stores your simulated wallet balance and transaction history.</span>
+                <span><strong>MongoDB Atlas</strong> &mdash; Cloud database (free M0 tier) that persists your simulated wallet balance and transaction history across sessions.</span>
               </div>
             </div>
           </div>
@@ -208,20 +241,30 @@ export default function ArchitecturePage() {
         <section className="arch-section">
           <h2 className="arch-section__title">What Happens When You Chat</h2>
           <p className="arch-text arch-text--muted">
-            When you ask &ldquo;What is the price of BTC?&rdquo;, here is exactly what happens
-            behind the scenes, step by step:
+            The sequence diagram below reads top-to-bottom like a timeline. Each vertical
+            line is a component, and horizontal arrows show messages between them. Solid arrows
+            are requests; dashed arrows are responses. Follow along to see exactly what happens
+            when you ask &ldquo;What is the price of BTC?&rdquo;
           </p>
           <div className="arch-card arch-card--diagram">
             <Mermaid chart={chatFlowChart} />
           </div>
           <div className="arch-card">
+            <p className="arch-text" style={{ marginBottom: 12 }}>
+              <strong>Key takeaway:</strong> The AI agent acts as a smart router. It reads your
+              message, understands the intent, picks the right tool, and translates the raw data
+              into a human-friendly response. You never need to know which API to call &mdash;
+              the agent handles it.
+            </p>
             <ol className="arch-ol">
               <li>You type your question in the chat box and hit send.</li>
-              <li>The frontend sends your message to the backend API.</li>
-              <li>The AI agent reads your message and decides it needs to look up a price.</li>
-              <li>It calls the <em>get_crypto_price</em> tool, which uses CCXT to query Binance.</li>
-              <li>Binance returns the real, live price of BTC.</li>
-              <li>The AI formats a friendly reply and sends it back to you.</li>
+              <li>The React frontend sends a <em>POST /chat</em> request to the FastAPI backend.</li>
+              <li>The AI agent (LangChain) passes your message to the Gemini LLM to understand intent.</li>
+              <li>The LLM determines it needs price data and calls the <em>get_crypto_price</em> tool.</li>
+              <li>The tool uses the CCXT library to query the exchange&rsquo;s public API for BTC/USDT.</li>
+              <li>The exchange returns real-time market data (price, bid, ask, volume, 24h high/low).</li>
+              <li>The LLM formats a natural-language reply and sends it back through the chain.</li>
+              <li>The frontend displays the answer in the chat &mdash; the whole round trip takes 3-8 seconds.</li>
             </ol>
           </div>
         </section>
@@ -230,21 +273,29 @@ export default function ArchitecturePage() {
         <section className="arch-section">
           <h2 className="arch-section__title">What Happens When You Buy Crypto</h2>
           <p className="arch-text arch-text--muted">
-            When you say &ldquo;Buy $100 of ETH&rdquo;, the agent does more work &mdash;
-            it fetches the price, calculates the amount, updates your wallet, and records the trade:
+            This sequence diagram shows a more complex flow with <strong>two external
+            services</strong> (exchange + database). Notice how the Buy Tool acts as an
+            orchestrator &mdash; it coordinates between the exchange for pricing and MongoDB
+            for wallet updates, all within a single tool call.
           </p>
           <div className="arch-card arch-card--diagram">
             <Mermaid chart={buyFlowChart} />
           </div>
           <div className="arch-card">
+            <p className="arch-text" style={{ marginBottom: 12 }}>
+              <strong>Key takeaway:</strong> The buy operation is <em>atomic</em> &mdash; the tool
+              checks your balance, fetches the price, updates the wallet, and records the transaction
+              all in one step. If any step fails (e.g. insufficient funds), the whole operation is
+              rolled back and the agent reports the error.
+            </p>
             <ol className="arch-ol">
-              <li>The AI recognizes you want to buy and calls the <em>buy_crypto</em> tool.</li>
-              <li>The tool fetches the current ETH price from Binance (e.g. $3,200.50).</li>
-              <li>It calculates how much ETH $100 buys: 100 &divide; 3200.50 = 0.03125 ETH.</li>
-              <li>Your MongoDB wallet is updated: $100 deducted from USD, 0.03125 ETH added.</li>
-              <li>A transaction record is saved with price, amount, and timestamp.</li>
-              <li>The AI confirms the trade in plain English.</li>
-              <li>Your Wallet and Transactions pages refresh automatically.</li>
+              <li>The AI recognizes you want to buy and calls the <em>buy_crypto</em> tool with symbol and USD amount.</li>
+              <li>The tool fetches the current ETH price from the exchange (e.g. $1,972.25).</li>
+              <li>It calculates how much ETH $100 buys: 100 &divide; 1972.25 = 0.05070 ETH.</li>
+              <li>Your MongoDB wallet is updated: $100 deducted from USD, 0.05070 ETH added.</li>
+              <li>A transaction record is saved with price, amount, USD value, and timestamp.</li>
+              <li>The AI confirms the trade in plain English with a breakdown of the purchase.</li>
+              <li>Your Wallet and Transactions pages refresh automatically via Redux state updates.</li>
             </ol>
           </div>
         </section>
@@ -272,7 +323,47 @@ export default function ArchitecturePage() {
           </div>
         </section>
 
-        {/* Section 6: Tech Stack */}
+        {/* Section 6: Deployment Architecture */}
+        <section className="arch-section">
+          <h2 className="arch-section__title">Deployment Architecture</h2>
+          <p className="arch-text arch-text--muted">
+            This flowchart shows how the app is deployed in production. The entire stack runs
+            on <strong>free-tier services</strong> ($0/month). The frontend is a static build
+            on Vercel, and the backend runs as a web service on Render.
+          </p>
+          <div className="arch-card arch-card--diagram">
+            <Mermaid chart={deploymentChart} />
+          </div>
+          <div className="arch-card">
+            <p className="arch-text" style={{ marginBottom: 12 }}>
+              <strong>Why Kraken instead of Binance?</strong> The backend runs on Render&rsquo;s
+              servers in Oregon, USA. Binance blocks API requests from US IP addresses, so
+              the production deployment uses Kraken (which has no geo-restrictions). Locally,
+              you can still use Binance if you&rsquo;re outside the US. The exchange is
+              configurable via the <em>DEFAULT_EXCHANGE</em> environment variable.
+            </p>
+            <div className="arch-legend">
+              <div className="arch-legend__item">
+                <span className="arch-legend__dot arch-legend__dot--blue" />
+                <span><strong>Vercel (Free)</strong> &mdash; Hosts the React static build. Auto-deploys on git push. Global CDN for fast loading.</span>
+              </div>
+              <div className="arch-legend__item">
+                <span className="arch-legend__dot arch-legend__dot--green" />
+                <span><strong>Render (Free)</strong> &mdash; Runs the FastAPI backend. Sleeps after 15min of inactivity; first request after sleep takes ~30-50s.</span>
+              </div>
+              <div className="arch-legend__item">
+                <span className="arch-legend__dot arch-legend__dot--orange" />
+                <span><strong>Kraken API</strong> &mdash; Public market data with no geo-restrictions. No API key required for price queries.</span>
+              </div>
+              <div className="arch-legend__item">
+                <span className="arch-legend__dot arch-legend__dot--purple" />
+                <span><strong>MongoDB Atlas M0</strong> &mdash; Free cloud database (512MB). Stores wallet balances and transaction history.</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Section 7: Tech Stack */}
         <section className="arch-section">
           <h2 className="arch-section__title">Tech Stack</h2>
           <div className="arch-card">
@@ -291,11 +382,15 @@ export default function ArchitecturePage() {
               </div>
               <div className="arch-stack__row">
                 <span className="arch-stack__label">Market Data</span>
-                <span className="arch-stack__value">CCXT &rarr; Binance (real-time, no API key needed)</span>
+                <span className="arch-stack__value">CCXT &rarr; Kraken (prod) / Binance (local)</span>
               </div>
               <div className="arch-stack__row">
                 <span className="arch-stack__label">Database</span>
-                <span className="arch-stack__value">MongoDB Atlas (cloud)</span>
+                <span className="arch-stack__value">MongoDB Atlas (cloud, free M0 tier)</span>
+              </div>
+              <div className="arch-stack__row">
+                <span className="arch-stack__label">Hosting</span>
+                <span className="arch-stack__value">Vercel (frontend) + Render (backend) &mdash; $0/month</span>
               </div>
             </div>
           </div>
