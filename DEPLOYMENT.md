@@ -5,29 +5,33 @@ Deploy the Crypto Trading AI Agent for **$0/month** using free-tier services.
 ## Architecture
 
 ```
-┌─────────────┐     HTTPS      ┌──────────────────┐
-│   Browser    │ ──────────────▶│  Vercel (Free)   │
-│             │                │  React static    │
-└─────────────┘                └────────┬─────────┘
-                                        │ VITE_API_URL
-                                        ▼
-                               ┌──────────────────┐
-                               │  Render (Free)   │
-                               │  FastAPI + Agent  │
-                               └──┬──────┬──────┬─┘
-                                  │      │      │
-                     ┌────────────┘      │      └────────────┐
-                     ▼                   ▼                   ▼
-              ┌─────────────┐   ┌──────────────┐   ┌──────────────┐
-              │ Kraken API  │   │ MongoDB Atlas│   │ HKBU GenAI   │
-              │ (prices)    │   │ M0 (free)    │   │ API (LLM)    │
-              └─────────────┘   └──────────────┘   └──────────────┘
+┌─────────────┐     HTTPS      ┌──────────────────────────────────────┐
+│   Browser    │ ──────────────▶│  Vercel (Free)                       │
+│             │                │  React static: Chat, Wallet,          │
+└─────────────┘                │  Transactions, MCP Inspector, Arch    │
+                               └────────────────┬─────────────────────┘
+                                                │ VITE_API_URL
+                                                ▼
+                               ┌──────────────────────────────────────┐
+                               │  Render (Free)                       │
+                               │  FastAPI + LangChain Agent            │
+                               │  + MCP Simulator (JSON-RPC logging)   │
+                               └──┬──────────┬──────────┬─────────────┘
+                                  │          │          │
+                     ┌────────────┘          │          └────────────┐
+                     ▼                       ▼                       ▼
+              ┌─────────────┐   ┌────────────────────┐   ┌──────────────┐
+              │ Kraken API  │   │ MongoDB Atlas M0   │   │ HKBU GenAI   │
+              │ (prices via │   │ - wallets           │   │ API (LLM)    │
+              │  CCXT)      │   │ - transactions      │   │ Gemini 2.5   │
+              └─────────────┘   │ - mcp_logs          │   └──────────────┘
+                                └────────────────────┘
 ```
 
 | Component | Platform | Tier | Cost |
 |-----------|----------|------|------|
 | Frontend | Vercel | Hobby (free) | $0 |
-| Backend | Render | Free web service | $0 |
+| Backend + MCP Simulator | Render | Free web service | $0 |
 | Database | MongoDB Atlas | M0 (free) | $0 |
 | AI Model | HKBU GenAI API | University-provided | $0 |
 | Market Data | Kraken public API | No key needed | $0 |
@@ -131,15 +135,57 @@ curl https://<backend>.onrender.com/health
 curl https://<backend>.onrender.com/balance/user_default
 # Expected: {"user_id":"user_default","assets":{"USD":10000.0}}
 
-# Backend chat test
+# Backend chat test (response now includes agent steps + MCP logs)
 curl -X POST https://<backend>.onrender.com/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "What is the price of BTC?", "user_id": "user_default"}'
-# Expected: {"response":"The current price of BTC is $68,887.90...","user_id":"user_default"}
+# Expected: {"response":"...","user_id":"user_default","steps":[{"tool":"get_crypto_price",...}]}
+
+# MCP log — live (current session)
+curl https://<backend>.onrender.com/mcp-log/user_default?source=live
+# Expected: {"mcp_calls":[...]}
+
+# MCP log — history (from MongoDB, paginated)
+curl https://<backend>.onrender.com/mcp-log/user_default?source=history&limit=10&skip=0
+# Expected: {"mcp_calls":[...]}
+
+# Clear MCP history
+curl -X DELETE https://<backend>.onrender.com/mcp-log/user_default
+# Expected: {"deleted": <count>}
 
 # Frontend
 open https://<frontend>.vercel.app
 ```
+
+### Frontend pages
+
+| Page | Description |
+|------|-------------|
+| **Chat** | Chat with the AI agent. Each response shows a translation pipeline (your question → AI tool call → MCP JSON-RPC → AI reply). |
+| **Wallet** | View simulated wallet balance. |
+| **Transactions** | View trade history. |
+| **MCP Inspector** | Two tabs: **Live** (current session MCP calls) and **History** (all past calls from MongoDB, paginated). |
+| **How It Works** | Architecture diagrams and explanations. |
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/chat` | Send a message to the AI agent. Returns `response`, `user_id`, and `steps` (agent reasoning + MCP JSON-RPC logs). |
+| `GET` | `/balance/{user_id}` | Get wallet balance (no LLM call). |
+| `GET` | `/transactions/{user_id}?limit=20` | Get recent transaction history (no LLM call). |
+| `GET` | `/mcp-log/{user_id}?source=live` | Get current session MCP calls (in-memory). |
+| `GET` | `/mcp-log/{user_id}?source=history&limit=50&skip=0` | Get all past MCP calls from MongoDB (paginated). |
+| `DELETE` | `/mcp-log/{user_id}` | Clear all persisted MCP logs for a user. |
+| `GET` | `/health` | Health check. |
+
+### MongoDB Collections
+
+| Collection | Contents |
+|------------|----------|
+| `wallets` | User wallet balances (keyed by `_id` = user_id). |
+| `transactions` | Buy/sell transaction records with price, amount, timestamp. |
+| `mcp_logs` | Every MCP JSON-RPC request/response pair, persisted for history. |
 
 ## Deploy Script (One-Command)
 
