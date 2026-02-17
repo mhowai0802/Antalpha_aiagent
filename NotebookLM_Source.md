@@ -67,21 +67,30 @@ The agent has access to 5 tools:
 - check_balance: Returns the user's wallet holdings with current USD values for each asset.
 - transaction_history: Lists recent trades with type (buy/sell), amount, price, USD value, and timestamp.
 
-### Layer 4: MCP Protocol Layer (Simulated MCP Server)
+### Layer 4: MCP Protocol Layer (FastMCP Server + Bridge)
 
-This is a key educational feature of the application. Between the AI agent's tools and the actual external services (exchange API and database), there is an in-process MCP (Model Context Protocol) Server Simulator.
+This is a key educational feature of the application. Between the AI agent's tools and the actual external services (exchange API and database), there is a real MCP (Model Context Protocol) server built with the official FastMCP SDK, connected to the LangChain agent through an in-process bridge that handles JSON-RPC logging.
 
 #### What is MCP?
 
-MCP (Model Context Protocol) is a standard protocol created by Anthropic for AI models to interact with external tools and data sources. It uses JSON-RPC 2.0 as its message format. In a real MCP setup, an MCP server would run as a separate process and communicate over stdio or HTTP. Our simulator runs in-process but formats every call identically to the real protocol.
+MCP (Model Context Protocol) is a standard protocol created by Anthropic for AI models to interact with external tools and data sources. It uses JSON-RPC 2.0 as its message format. In a production MCP setup, an MCP server runs as a separate process and communicates over stdio, SSE, or HTTP.
 
-#### How the MCP Simulator Works
+#### Architecture: FastMCP + Bridge
 
-When a LangChain tool is invoked (e.g., get_crypto_price), instead of calling the exchange API directly, it sends a request through the MCP simulator. Here is what happens:
+The MCP layer follows the same architecture as the official Binance MCP server:
 
-Step 1 — The tool calls mcp_server.call_tool("get_crypto_price", {"symbol": "BTC"}).
+- **FastMCP Server (server.py)**: Tools are defined once using `@mcp.tool()` decorators — the single source of truth for tool names, descriptions, and parameter schemas. The server is also mounted on the FastAPI app via SSE at `/mcp`, so external MCP clients (like Claude Desktop or Cursor) can connect to it.
+- **Handlers (handlers.py)**: Standalone handler functions that contain the actual business logic. Each handler returns a structured Dict response following the Binance MCP pattern: `{"success": true, "data": {...}, "timestamp": ...}` for success, or `{"success": false, "error": {"type": "...", "message": "..."}}` for errors.
+- **Shared Utilities (utils.py)**: Standardized response builders (`create_success_response`, `create_error_response`), input validators (`validate_symbol`, `validate_positive_number`), and a rate limiter (`@rate_limited` decorator with a sliding-window `RateLimiter` class).
+- **MCP Bridge (bridge.py)**: An in-process bridge that connects LangChain tools to the handlers. It calls handlers directly (no transport overhead) while constructing JSON-RPC 2.0 request/response log entries for the MCP Inspector UI and persisting them to MongoDB.
 
-Step 2 — The MCP simulator constructs a JSON-RPC 2.0 request:
+#### How the MCP Bridge Works
+
+When a LangChain tool is invoked (e.g., get_crypto_price), instead of calling the exchange API directly, it sends a request through the MCP bridge. Here is what happens:
+
+Step 1 — The tool calls mcp_bridge.call_tool("get_crypto_price", {"symbol": "BTC"}).
+
+Step 2 — The bridge constructs a JSON-RPC 2.0 request:
 ```json
 {
   "jsonrpc": "2.0",
@@ -94,9 +103,25 @@ Step 2 — The MCP simulator constructs a JSON-RPC 2.0 request:
 }
 ```
 
-Step 3 — The simulator looks up the registered handler for "get_crypto_price" and calls it. The handler uses the CCXT library to fetch the price from the exchange.
+Step 3 — The bridge calls the registered handler for "get_crypto_price". The handler validates the input using `validate_symbol()`, then uses the CCXT library to fetch the price from the exchange, and returns a structured response:
+```json
+{
+  "success": true,
+  "data": {
+    "symbol": "BTC/USDT",
+    "last": 68887.90,
+    "bid": 68885.00,
+    "ask": 68890.00,
+    "high": 69241.50,
+    "low": 66734.30,
+    "volume": 18432.56
+  },
+  "timestamp": 1771345659427,
+  "metadata": {"source": "ccxt", "endpoint": "get_ticker"}
+}
+```
 
-Step 4 — The simulator wraps the result in a JSON-RPC 2.0 response:
+Step 4 — The bridge converts the structured result to display text and wraps it in a JSON-RPC 2.0 response:
 ```json
 {
   "jsonrpc": "2.0",
@@ -104,16 +129,17 @@ Step 4 — The simulator wraps the result in a JSON-RPC 2.0 response:
     "content": [
       {
         "type": "text",
-        "text": "BTC/USDT price info:\n  Current: $68,887.90\n  Bid: $68,885.00 | Ask: $68,890.00\n  24h High: $69,241.50 | Low: $66,734.30"
+        "text": "{\"symbol\": \"BTC/USDT\", \"last\": 68887.90, ...}"
       }
     ],
-    "isError": false
+    "isError": false,
+    "_structured": {"success": true, "data": {...}, "timestamp": ...}
   },
   "id": 1
 }
 ```
 
-Step 5 — Both the request and response are logged in memory (for the "Live" tab) and persisted to MongoDB's mcp_logs collection (for the "History" tab).
+Step 5 — Both the request and response are logged in memory (for the "Live" tab) and persisted to MongoDB's mcp_logs collection (for the "History" tab). The `_structured` field preserves the raw typed data for inspection.
 
 Step 6 — The text content from the response is returned to the LangChain tool, which passes it back to the LLM.
 
@@ -168,10 +194,10 @@ When a user asks "What is the price of BTC?", this is the exact sequence of even
 3. The FastAPI backend receives the request and passes the message to the LangChain AgentExecutor.
 4. The AgentExecutor sends the message to the Gemini LLM with the system prompt and available tool definitions.
 5. The LLM analyzes the user's intent and determines it needs to call get_crypto_price with argument symbol="BTC".
-6. The LangChain tool's _run method is called. Instead of querying the exchange directly, it calls mcp_server.call_tool("get_crypto_price", {"symbol": "BTC"}).
-7. The MCP simulator constructs a JSON-RPC request, calls the registered handler, which uses CCXT to query the exchange's public API for BTC/USDT.
-8. The exchange returns real-time market data: current price, bid, ask, 24-hour high, 24-hour low, and volume.
-9. The MCP simulator wraps the result in a JSON-RPC response, logs both request and response (in memory and to MongoDB), and returns the text content.
+6. The LangChain tool's _run method is called. Instead of querying the exchange directly, it calls mcp_bridge.call_tool("get_crypto_price", {"symbol": "BTC"}).
+7. The MCP bridge constructs a JSON-RPC request, calls the registered handler (which validates the input, then uses CCXT to query the exchange's public API for BTC/USDT).
+8. The handler returns a structured Dict with the market data: current price, bid, ask, 24-hour high, 24-hour low, and volume.
+9. The MCP bridge wraps the structured result in a JSON-RPC response, logs both request and response (in memory and to MongoDB), and returns the text content.
 10. The tool result flows back to the LLM, which composes a friendly natural-language reply.
 11. The AgentExecutor returns the final output along with intermediate_steps (containing the tool call details and MCP logs).
 12. The FastAPI endpoint packages everything into a response with response (the text), steps (the agent reasoning with MCP request/response pairs), and user_id.
@@ -187,13 +213,13 @@ The entire round trip takes approximately 3 to 8 seconds.
 When a user says "Buy $100 of ETH", a more complex flow occurs because it involves two external services (exchange for pricing, database for wallet updates):
 
 1. The AI recognizes the buy intent and calls buy_crypto with arguments symbol="ETH" and amount=100.
-2. The tool sends a JSON-RPC request to the MCP simulator for "buy_crypto".
-3. The MCP handler first fetches the current ETH price from the exchange via CCXT (e.g., $1,972.25).
+2. The tool sends a JSON-RPC request to the MCP bridge for "buy_crypto".
+3. The handler validates the input (symbol and amount), then fetches the current ETH price from the exchange via CCXT (e.g., $1,972.25).
 4. It calculates how much ETH $100 buys: 100 / 1972.25 = 0.05070 ETH.
 5. It checks the user's wallet in MongoDB to ensure they have at least $100 USD.
 6. It performs an atomic MongoDB update: deducts $100 from USD balance and adds 0.05070 to ETH balance.
 7. It inserts a transaction record into the transactions collection with the trade details.
-8. The MCP response is logged and the result text is returned to the LLM.
+8. The handler returns a structured success response. The MCP bridge logs the JSON-RPC pair and returns the text to the LLM.
 9. The AI composes a confirmation message: "Bought 0.05070 ETH at $1,972.25, spent $100.00 USD."
 10. The frontend displays the confirmation and auto-refreshes the Wallet and Transactions pages.
 
@@ -255,7 +281,7 @@ Users can clear history by clicking "Clear History" in the History tab, which se
 
 Frontend: React 18 with TypeScript, Redux Toolkit for state management, Vite for building, SCSS for styling, react-markdown for rendering AI responses, lucide-react for icons, and mermaid for architecture diagrams.
 
-Backend: Python 3.11, FastAPI for the web server, LangChain for the AI agent framework, Pydantic for data validation, uvicorn as the ASGI server.
+Backend: Python 3.11, FastAPI for the web server, LangChain for the AI agent framework, FastMCP for the MCP server (with @mcp.tool() decorators and SSE transport), Pydantic for data validation, uvicorn as the ASGI server.
 
 AI Model: Google Gemini 2.5 Flash, accessed through the HKBU GenAI API (which provides an Azure OpenAI-compatible endpoint).
 
@@ -275,7 +301,7 @@ The entire application runs on free-tier cloud services:
 
 Browser connects via HTTPS to Vercel, which serves the React static build. Vercel connects to the Render backend using the VITE_API_URL environment variable set at build time.
 
-The Render backend (FastAPI + LangChain + MCP Simulator) connects to three external services:
+The Render backend (FastAPI + LangChain + FastMCP Bridge) connects to three external services:
 - Kraken API via the CCXT library for live cryptocurrency prices
 - MongoDB Atlas M0 via pymongo for wallet, transaction, and MCP log persistence
 - HKBU GenAI API via langchain-openai for the Gemini 2.5 Flash LLM
@@ -306,19 +332,21 @@ Each document records one MCP JSON-RPC call with fields: user_id, type ("tools/c
 ```
 Antalpha_aiagent/
 ├── backend/
-│   ├── main.py                    # FastAPI server with all endpoints
+│   ├── main.py                    # FastAPI server with all endpoints + FastMCP SSE mount
 │   ├── agent/
 │   │   ├── crypto_agent.py        # LangChain agent setup (AgentWithMCP wrapper)
-│   │   └── tools.py               # 5 LangChain tools that route through MCP
+│   │   └── tools.py               # Auto-generated LangChain tools from spec table
 │   ├── mcp_server/
-│   │   ├── simulator.py           # MCPSimulator class (JSON-RPC formatting + logging)
-│   │   ├── handlers.py            # Standalone handler functions for each tool
-│   │   └── registry.py            # Factory that creates and registers all tools
+│   │   ├── server.py              # FastMCP server — @mcp.tool() definitions (single source of truth)
+│   │   ├── bridge.py              # MCPBridge — JSON-RPC logging wrapper for LangChain integration
+│   │   ├── handlers.py            # Handler functions returning structured Dict responses
+│   │   ├── utils.py               # Shared utilities: validators, response builders, rate limiter
+│   │   └── registry.py            # Factory that creates MCPBridge for a user
 │   ├── mcp_client/
 │   │   └── ccxt_client.py         # CCXT wrapper for exchange API calls
 │   ├── db/
 │   │   └── mongo.py               # MongoDB operations (wallets, transactions, mcp_logs)
-│   └── requirements.txt
+│   └── requirements.txt           # Includes fastmcp>=2.0.0
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx                # Root component with page routing
@@ -350,8 +378,8 @@ Antalpha_aiagent/
 ### Why simulate trades instead of executing real ones?
 The app is designed for education and demonstration. Real trading requires KYC verification, API keys with trading permissions, and carries financial risk. Simulated trading lets users experience the full flow safely.
 
-### Why use an MCP simulator instead of a real MCP server?
-A real MCP server would run as a separate process communicating over stdio or HTTP, adding operational complexity. The in-process simulator gives the same visual benefit (users see JSON-RPC format) without needing subprocess management or additional infrastructure. The handler functions are identical — if the project later needs a real MCP server, only the transport layer changes.
+### Why use FastMCP with a bridge instead of a standalone MCP server?
+The project uses the official FastMCP SDK to define tools via `@mcp.tool()` decorators — following the same pattern as the Binance MCP server. This gives us a real MCP server (mountable via SSE for external clients like Claude Desktop or Cursor) while keeping the LangChain agent integration in-process through the MCPBridge. The bridge provides JSON-RPC logging for the Inspector UI without transport overhead. Handlers return structured Dict responses with the `{success, data, error}` pattern, input validation via shared utilities, and rate limiting — all modeled after production MCP server best practices.
 
 ### Why LangChain instead of calling the LLM directly?
 LangChain provides the AgentExecutor framework that handles the tool-calling loop automatically — the LLM decides which tool to call, LangChain executes it, passes the result back, and lets the LLM decide if it needs to call another tool or compose a final response. This multi-step reasoning would be complex to build from scratch.
