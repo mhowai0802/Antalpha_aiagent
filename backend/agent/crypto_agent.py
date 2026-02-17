@@ -9,13 +9,13 @@ from langchain_openai import AzureChatOpenAI
 
 from agent.tools import create_tools
 from mcp_server.registry import create_mcp_server
-from mcp_server.simulator import MCPSimulator
+from mcp_server.bridge import MCPBridge
 
 
 class AgentWithMCP:
-    """Thin wrapper that pairs an AgentExecutor with its MCP simulator."""
+    """Thin wrapper that pairs an AgentExecutor with its MCP bridge."""
 
-    def __init__(self, executor: AgentExecutor, mcp_server: MCPSimulator):
+    def __init__(self, executor: AgentExecutor, mcp_server: MCPBridge):
         self.executor = executor
         self.mcp_server = mcp_server
 

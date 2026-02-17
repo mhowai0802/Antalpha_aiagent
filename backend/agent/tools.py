@@ -1,17 +1,20 @@
 """
 LangChain tools for crypto agent.
-Each tool delegates to the MCP simulator so every call is logged as
+Each tool delegates to the MCP bridge so every call is logged as
 a JSON-RPC request/response pair visible to the frontend.
+
+Input Pydantic models are kept for LangChain schema generation.
+Tool routing goes through MCPBridge.call_tool().
 """
 from typing import Any, List, Type
 
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from mcp_server.simulator import MCPSimulator
+from mcp_server.bridge import MCPBridge
 
 
-# ── Input schemas (unchanged) ────────────────────────────────────
+# ── Input schemas ─────────────────────────────────────────────────
 
 class CryptoPriceInput(BaseModel):
     """Input for get_crypto_price tool."""
@@ -40,7 +43,7 @@ class TransactionHistoryInput(BaseModel):
     limit: int = Field(default=10, description="Number of transactions to return")
 
 
-# ── Helper to extract text from an MCP response ─────────────────
+# ── Helper to extract text from an MCP response ──────────────────
 
 def _mcp_text(resp: dict) -> str:
     """Pull the text content out of an MCP JSON-RPC response."""
@@ -49,96 +52,106 @@ def _mcp_text(resp: dict) -> str:
     return resp["result"]["content"][0]["text"]
 
 
-# ── Tool factory ─────────────────────────────────────────────────
+# ── Tool specification table ──────────────────────────────────────
+# Single table that drives LangChain tool generation.
+# Each entry maps to one tool: (name, description, args_schema, arg_keys).
 
-def create_tools(user_id: str = "user_default",
-                 mcp_server: MCPSimulator | None = None) -> List[BaseTool]:
-    """Create LangChain tools that route through the MCP simulator."""
-
-    class GetCryptoPriceTool(BaseTool):
-        name: str = "get_crypto_price"
-        description: str = (
+_TOOL_TABLE = [
+    {
+        "name": "get_crypto_price",
+        "description": (
             "Get the current real-time market price for a cryptocurrency in USD. "
             "Input: symbol like BTC, ETH, SOL, or BTC/USDT. "
             "Price data comes from the exchange."
-        )
-        args_schema: Type[BaseModel] = CryptoPriceInput
-        _mcp: Any = None
-
-        def _run(self, symbol: str) -> str:
-            if self._mcp:
-                return _mcp_text(self._mcp.call_tool("get_crypto_price", {"symbol": symbol}))
-            from mcp_server.handlers import handle_get_price
-            return handle_get_price(symbol)
-
-    class GetOrderbookTool(BaseTool):
-        name: str = "get_orderbook"
-        description: str = (
+        ),
+        "args_schema": CryptoPriceInput,
+        "arg_keys": ["symbol"],
+    },
+    {
+        "name": "get_orderbook",
+        "description": (
             "Get the order book (buy/sell depth) for a trading pair. "
             "Shows current market bids and asks."
-        )
-        args_schema: Type[BaseModel] = CryptoOrderbookInput
-        _mcp: Any = None
-
-        def _run(self, symbol: str, limit: int = 5) -> str:
-            if self._mcp:
-                return _mcp_text(self._mcp.call_tool("get_orderbook", {"symbol": symbol, "limit": limit}))
-            from mcp_server.handlers import handle_get_orderbook
-            return handle_get_orderbook(symbol, limit)
-
-    class BuyCryptoTool(BaseTool):
-        name: str = "buy_crypto"
-        description: str = (
+        ),
+        "args_schema": CryptoOrderbookInput,
+        "arg_keys": ["symbol", "limit"],
+    },
+    {
+        "name": "buy_crypto",
+        "description": (
             "Simulate buying cryptocurrency with USD. Uses real market price. "
             "Input: symbol (e.g. BTC, ETH) and amount in USD. "
             "This is a simulation - no real money is spent."
-        )
-        args_schema: Type[BaseModel] = CryptoBuyInput
-        _mcp: Any = None
+        ),
+        "args_schema": CryptoBuyInput,
+        "arg_keys": ["symbol", "amount"],
+    },
+    {
+        "name": "check_balance",
+        "description": "Get the user's wallet balance. Shows all assets with current USD values.",
+        "args_schema": CryptoBalanceInput,
+        "arg_keys": [],
+    },
+    {
+        "name": "transaction_history",
+        "description": (
+            "Get the user's recent transaction history. "
+            "Shows buys with symbol, amount, price, and timestamp."
+        ),
+        "args_schema": TransactionHistoryInput,
+        "arg_keys": ["limit"],
+    },
+]
 
-        def _run(self, symbol: str, amount: float) -> str:
-            if self._mcp:
-                return _mcp_text(self._mcp.call_tool("buy_crypto", {"symbol": symbol, "amount": amount}))
-            from mcp_server.handlers import handle_buy_crypto
-            return handle_buy_crypto(user_id, symbol, amount)
 
-    class CheckBalanceTool(BaseTool):
-        name: str = "check_balance"
-        description: str = "Get the user's wallet balance. Shows all assets with current USD values."
-        args_schema: Type[BaseModel] = CryptoBalanceInput
+# ── Tool factory ──────────────────────────────────────────────────
+
+def _make_tool(spec: dict, mcp_bridge: MCPBridge | None) -> BaseTool:
+    """
+    Dynamically create a LangChain BaseTool subclass from a spec dict.
+    The tool routes calls through the MCP bridge for logging.
+    """
+    tool_name = spec["name"]
+    tool_desc = spec["description"]
+    tool_schema = spec["args_schema"]
+    arg_keys = spec["arg_keys"]
+
+    class _DynamicTool(BaseTool):
+        name: str = tool_name
+        description: str = tool_desc
+        args_schema: Type[BaseModel] = tool_schema
         _mcp: Any = None
 
         def _run(self, **kwargs) -> str:
+            args = {k: kwargs[k] for k in arg_keys if k in kwargs}
             if self._mcp:
-                return _mcp_text(self._mcp.call_tool("check_balance", {}))
-            from mcp_server.handlers import handle_check_balance
-            return handle_check_balance(user_id)
+                return _mcp_text(self._mcp.call_tool(tool_name, args))
+            # Fallback: call handler directly (no logging)
+            from mcp_server.handlers import (
+                handle_get_price,
+                handle_get_orderbook,
+                handle_buy_crypto,
+                handle_check_balance,
+                handle_transaction_history,
+            )
+            from mcp_server.utils import format_for_display
+            handler_map = {
+                "get_crypto_price": handle_get_price,
+                "get_orderbook": handle_get_orderbook,
+                "buy_crypto": handle_buy_crypto,
+                "check_balance": handle_check_balance,
+                "transaction_history": handle_transaction_history,
+            }
+            return format_for_display(handler_map[tool_name](**args))
 
-    class TransactionHistoryTool(BaseTool):
-        name: str = "transaction_history"
-        description: str = (
-            "Get the user's recent transaction history. "
-            "Shows buys with symbol, amount, price, and timestamp."
-        )
-        args_schema: Type[BaseModel] = TransactionHistoryInput
-        _mcp: Any = None
+    tool = _DynamicTool()
+    tool._mcp = mcp_bridge
+    return tool
 
-        def _run(self, limit: int = 10) -> str:
-            if self._mcp:
-                return _mcp_text(self._mcp.call_tool("transaction_history", {"limit": limit}))
-            from mcp_server.handlers import handle_transaction_history
-            return handle_transaction_history(user_id, limit)
 
-    tools = [
-        GetCryptoPriceTool(),
-        GetOrderbookTool(),
-        BuyCryptoTool(),
-        CheckBalanceTool(),
-        TransactionHistoryTool(),
-    ]
-
-    if mcp_server is not None:
-        for t in tools:
-            t._mcp = mcp_server
-
-    return tools
+def create_tools(
+    user_id: str = "user_default",
+    mcp_server: MCPBridge | None = None,
+) -> List[BaseTool]:
+    """Create LangChain tools that route through the MCP bridge."""
+    return [_make_tool(spec, mcp_server) for spec in _TOOL_TABLE]

@@ -52,6 +52,15 @@ app.add_middleware(
 )
 
 
+# ── Mount FastMCP SSE endpoint for external MCP clients ───────────
+
+try:
+    from mcp_server.server import mcp as fastmcp_server
+    app.mount("/mcp", fastmcp_server.sse_app())
+except Exception:
+    pass  # FastMCP SSE mount is optional; don't break if unavailable
+
+
 # ── Request / Response models ────────────────────────────────────
 
 class ChatRequest(BaseModel):

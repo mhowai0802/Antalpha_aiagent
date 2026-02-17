@@ -16,7 +16,7 @@ const highLevelChart = `flowchart TD
   API["FastAPI Backend"]
   Agent["AI Agent (LangChain + Gemini)"]
   Tools["Agent Tools"]
-  MCP["MCP Server (Simulator)"]
+  MCP["MCP Server (FastMCP + Bridge)"]
   CCXT["CCXT Client"]
   Exchange["Crypto Exchange (Kraken/Binance)"]
   DB["MongoDB Database"]
@@ -230,7 +230,7 @@ export default function ArchitecturePage() {
               </div>
               <div className="arch-legend__item">
                 <span className="arch-legend__dot arch-legend__dot--orange" />
-                <span><strong>MCP Server (Simulator)</strong> &mdash; An in-process server that speaks the MCP JSON-RPC protocol. Every tool call is logged as a structured request/response pair, visible in the MCP Inspector page.</span>
+                <span><strong>MCP Server (FastMCP + Bridge)</strong> &mdash; A real FastMCP server with an in-process bridge that speaks the MCP JSON-RPC protocol. Tools are defined once via <code>@mcp.tool()</code> decorators, return structured responses, and every call is logged as a JSON-RPC request/response pair visible in the MCP Inspector page. External MCP clients can also connect via SSE.</span>
               </div>
               <div className="arch-legend__item">
                 <span className="arch-legend__dot arch-legend__dot--orange" />
@@ -381,7 +381,7 @@ export default function ArchitecturePage() {
               </div>
               <div className="arch-stack__row">
                 <span className="arch-stack__label">Backend</span>
-                <span className="arch-stack__value">Python, FastAPI, LangChain</span>
+                <span className="arch-stack__value">Python, FastAPI, LangChain, FastMCP</span>
               </div>
               <div className="arch-stack__row">
                 <span className="arch-stack__label">AI Model</span>

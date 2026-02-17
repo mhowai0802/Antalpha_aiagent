@@ -1,1 +1,1 @@
-# mcp_server package — simulated MCP server for educational UI transparency
+# mcp_server package — FastMCP-based MCP server with JSON-RPC logging bridge
