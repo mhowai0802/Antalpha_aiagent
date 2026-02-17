@@ -20,8 +20,8 @@ services:
       - key: MONGODB_DB
         value: crypto_agent
       - key: DEFAULT_EXCHANGE
-        value: binance
+        value: kraken
       - key: FRONTEND_URL
         sync: false
       - key: PYTHON_VERSION
-        value: "3.11"
+        value: "3.11.11"
