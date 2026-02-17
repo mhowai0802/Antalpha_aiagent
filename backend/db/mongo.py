@@ -41,6 +41,10 @@ def _transactions_collection() -> Collection:
     return get_db()["transactions"]
 
 
+def _mcp_logs_collection() -> Collection:
+    return get_db()["mcp_logs"]
+
+
 def init_wallet(user_id: str = DEFAULT_USER_ID) -> dict:
     """
     Create wallet with $10,000 USD if not exists.
@@ -137,3 +141,40 @@ def get_transactions(user_id: str = DEFAULT_USER_ID, limit: int = 20) -> list:
         .limit(limit)
     )
     return list(cursor)
+
+
+# ── MCP log persistence ──────────────────────────────────────────
+
+def insert_mcp_log(user_id: str, log_entry: dict) -> None:
+    """Insert one MCP request/response pair into MongoDB."""
+    doc = {
+        "user_id": user_id,
+        "type": log_entry.get("type", "tools/call"),
+        "request": log_entry.get("request", {}),
+        "response": log_entry.get("response", {}),
+        "timestamp": log_entry.get("timestamp", 0),
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    _mcp_logs_collection().insert_one(doc)
+
+
+def get_mcp_logs(user_id: str, limit: int = 50, skip: int = 0) -> list:
+    """Fetch paginated MCP logs from MongoDB, newest first."""
+    cursor = (
+        _mcp_logs_collection()
+        .find({"user_id": user_id})
+        .sort("timestamp", -1)
+        .skip(skip)
+        .limit(limit)
+    )
+    results = []
+    for doc in cursor:
+        doc["_id"] = str(doc["_id"])
+        results.append(doc)
+    return results
+
+
+def clear_mcp_logs(user_id: str) -> int:
+    """Delete all MCP logs for a user. Returns count deleted."""
+    result = _mcp_logs_collection().delete_many({"user_id": user_id})
+    return result.deleted_count

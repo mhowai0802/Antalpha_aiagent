@@ -1,11 +1,12 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { chat } from '../api/agentApi';
+import { chat, AgentStep } from '../api/agentApi';
 
 const userId = 'user_default';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  steps?: AgentStep[];
 }
 
 interface ChatState {
@@ -21,7 +22,7 @@ export const sendMessage = createAsyncThunk(
     try {
       const data = await chat(message, userId);
       console.log('[chatSlice] sendMessage thunk OK:', data.response.substring(0, 80));
-      return data.response;
+      return { response: data.response, steps: data.steps ?? [] };
     } catch (err) {
       console.error('[chatSlice] sendMessage thunk ERROR:', err);
       throw err;
@@ -53,9 +54,13 @@ const chatSlice = createSlice({
         state.error = null;
       })
       .addCase(sendMessage.fulfilled, (state, action) => {
-        console.log('[chatSlice] reducer: FULFILLED, payload length:', action.payload?.length);
+        console.log('[chatSlice] reducer: FULFILLED, payload length:', action.payload.response?.length);
         state.loading = false;
-        state.messages.push({ role: 'assistant', content: action.payload });
+        state.messages.push({
+          role: 'assistant',
+          content: action.payload.response,
+          steps: action.payload.steps,
+        });
       })
       .addCase(sendMessage.rejected, (state, action) => {
         console.log('[chatSlice] reducer: REJECTED', action.error.message);

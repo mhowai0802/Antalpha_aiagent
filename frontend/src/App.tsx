@@ -9,10 +9,11 @@ import ChatPage from './components/ChatPage';
 import WalletPage from './components/WalletPage';
 import TransactionsPage from './components/TransactionsPage';
 import ArchitecturePage from './components/ArchitecturePage';
+import MCPInspectorPage from './components/MCPInspectorPage';
 import './index.css';
 import './App.scss';
 
-export type Page = 'chat' | 'wallet' | 'transactions' | 'architecture';
+export type Page = 'chat' | 'wallet' | 'transactions' | 'mcp' | 'architecture';
 
 // Fetch initial data into Redux store on app startup
 store.dispatch(fetchBalance());
@@ -49,6 +50,7 @@ export default function App() {
           {page === 'chat' && <ChatPage />}
           {page === 'wallet' && <WalletPage />}
           {page === 'transactions' && <TransactionsPage />}
+          {page === 'mcp' && <MCPInspectorPage />}
           {page === 'architecture' && <ArchitecturePage />}
         </main>
       </div>

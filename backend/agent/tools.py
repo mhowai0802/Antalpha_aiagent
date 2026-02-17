@@ -1,77 +1,75 @@
 """
-LangChain tools for crypto agent: price, orderbook, buy, balance, transaction history.
+LangChain tools for crypto agent.
+Each tool delegates to the MCP simulator so every call is logged as
+a JSON-RPC request/response pair visible to the frontend.
 """
-from typing import List, Optional, Type
+from typing import Any, List, Type
 
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from db.mongo import (
-    get_wallet,
-    init_wallet,
-    update_wallet_buy,
-    get_transactions,
-)
-from mcp_client.ccxt_client import get_ccxt_client
+from mcp_server.simulator import MCPSimulator
 
+
+# ── Input schemas (unchanged) ────────────────────────────────────
 
 class CryptoPriceInput(BaseModel):
     """Input for get_crypto_price tool."""
-
     symbol: str = Field(description="Cryptocurrency symbol, e.g. BTC, ETH, BTC/USDT")
 
 
 class CryptoOrderbookInput(BaseModel):
     """Input for get_orderbook tool."""
-
     symbol: str = Field(description="Trading pair symbol, e.g. BTC/USDT")
     limit: int = Field(default=5, description="Number of orders to return")
 
 
 class CryptoBuyInput(BaseModel):
     """Input for buy_crypto tool."""
-
     symbol: str = Field(description="Cryptocurrency symbol to buy, e.g. BTC, ETH")
     amount: float = Field(description="Amount in USD to spend")
 
 
 class CryptoBalanceInput(BaseModel):
     """Input for check_balance tool."""
-
     pass
 
 
 class TransactionHistoryInput(BaseModel):
     """Input for transaction_history tool."""
-
     limit: int = Field(default=10, description="Number of transactions to return")
 
 
-def create_tools(user_id: str = "user_default") -> List[BaseTool]:
-    """Create LangChain tools bound to a user_id."""
+# ── Helper to extract text from an MCP response ─────────────────
+
+def _mcp_text(resp: dict) -> str:
+    """Pull the text content out of an MCP JSON-RPC response."""
+    if "error" in resp:
+        return f"Error: {resp['error']['message']}"
+    return resp["result"]["content"][0]["text"]
+
+
+# ── Tool factory ─────────────────────────────────────────────────
+
+def create_tools(user_id: str = "user_default",
+                 mcp_server: MCPSimulator | None = None) -> List[BaseTool]:
+    """Create LangChain tools that route through the MCP simulator."""
 
     class GetCryptoPriceTool(BaseTool):
         name: str = "get_crypto_price"
         description: str = (
             "Get the current real-time market price for a cryptocurrency in USD. "
             "Input: symbol like BTC, ETH, SOL, or BTC/USDT. "
-            "Price data comes from Binance."
+            "Price data comes from the exchange."
         )
         args_schema: Type[BaseModel] = CryptoPriceInput
+        _mcp: Any = None
 
         def _run(self, symbol: str) -> str:
-            try:
-                client = get_ccxt_client()
-                ticker = client.get_ticker(symbol)
-                return (
-                    f"{ticker['symbol']} price info:\n"
-                    f"  Current: ${ticker['last']:,.2f}\n"
-                    f"  Bid: ${ticker['bid']:,.2f} | Ask: ${ticker['ask']:,.2f}\n"
-                    f"  24h High: ${ticker['high']:,.2f} | Low: ${ticker['low']:,.2f}\n"
-                    f"  24h Volume: {ticker['volume']:,.2f}"
-                )
-            except Exception as e:
-                return f"Error: {str(e)}"
+            if self._mcp:
+                return _mcp_text(self._mcp.call_tool("get_crypto_price", {"symbol": symbol}))
+            from mcp_server.handlers import handle_get_price
+            return handle_get_price(symbol)
 
     class GetOrderbookTool(BaseTool):
         name: str = "get_orderbook"
@@ -80,82 +78,41 @@ def create_tools(user_id: str = "user_default") -> List[BaseTool]:
             "Shows current market bids and asks."
         )
         args_schema: Type[BaseModel] = CryptoOrderbookInput
+        _mcp: Any = None
 
         def _run(self, symbol: str, limit: int = 5) -> str:
-            try:
-                client = get_ccxt_client()
-                ob = client.get_orderbook(symbol, limit)
-                lines = [f"Order book for {ob['symbol']}:\n"]
-                lines.append("Asks (sell):")
-                for ask in ob["asks"][:limit]:
-                    lines.append(f"  ${ask[0]:,.2f} x {ask[1]:,.8f}")
-                lines.append("\nBids (buy):")
-                for bid in ob["bids"][:limit]:
-                    lines.append(f"  ${bid[0]:,.2f} x {bid[1]:,.8f}")
-                return "\n".join(lines)
-            except Exception as e:
-                return f"Error: {str(e)}"
+            if self._mcp:
+                return _mcp_text(self._mcp.call_tool("get_orderbook", {"symbol": symbol, "limit": limit}))
+            from mcp_server.handlers import handle_get_orderbook
+            return handle_get_orderbook(symbol, limit)
 
     class BuyCryptoTool(BaseTool):
         name: str = "buy_crypto"
         description: str = (
-            "Simulate buying cryptocurrency with USD. Uses real market price from Binance. "
+            "Simulate buying cryptocurrency with USD. Uses real market price. "
             "Input: symbol (e.g. BTC, ETH) and amount in USD. "
             "This is a simulation - no real money is spent."
         )
         args_schema: Type[BaseModel] = CryptoBuyInput
+        _mcp: Any = None
 
         def _run(self, symbol: str, amount: float) -> str:
-            try:
-                if amount <= 0:
-                    return "Error: Amount must be greater than 0"
-                client = get_ccxt_client()
-                ticker = client.get_ticker(symbol)
-                price = ticker["last"]
-                base_symbol = symbol.split("/")[0] if "/" in symbol else symbol.upper()
-                crypto_amount = amount / price
-                err = update_wallet_buy(user_id, base_symbol, crypto_amount, amount, price)
-                if err:
-                    return err
-                return (
-                    f"Simulated buy successful!\n"
-                    f"  Bought {crypto_amount:.8f} {base_symbol}\n"
-                    f"  Spent: ${amount:,.2f} USD\n"
-                    f"  Price: ${price:,.2f} per {base_symbol}"
-                )
-            except Exception as e:
-                return f"Error: {str(e)}"
+            if self._mcp:
+                return _mcp_text(self._mcp.call_tool("buy_crypto", {"symbol": symbol, "amount": amount}))
+            from mcp_server.handlers import handle_buy_crypto
+            return handle_buy_crypto(user_id, symbol, amount)
 
     class CheckBalanceTool(BaseTool):
         name: str = "check_balance"
         description: str = "Get the user's wallet balance. Shows all assets with current USD values."
         args_schema: Type[BaseModel] = CryptoBalanceInput
+        _mcp: Any = None
 
         def _run(self, **kwargs) -> str:
-            try:
-                init_wallet(user_id)
-                wallet = get_wallet(user_id)
-                client = get_ccxt_client()
-                lines = ["Wallet balance:"]
-                total_usd = wallet.get("USD", 0.0)
-                for asset, balance in wallet.items():
-                    if balance <= 0:
-                        continue
-                    if asset == "USD":
-                        lines.append(f"  {asset}: ${balance:,.2f}")
-                    else:
-                        try:
-                            ticker = client.get_ticker(f"{asset}/USDT")
-                            price = ticker["last"]
-                            usd_val = balance * price
-                            total_usd += usd_val
-                            lines.append(f"  {asset}: {balance:.8f} (~${usd_val:,.2f})")
-                        except Exception:
-                            lines.append(f"  {asset}: {balance:.8f}")
-                lines.append(f"\nTotal value: ~${total_usd:,.2f} USD")
-                return "\n".join(lines)
-            except Exception as e:
-                return f"Error: {str(e)}"
+            if self._mcp:
+                return _mcp_text(self._mcp.call_tool("check_balance", {}))
+            from mcp_server.handlers import handle_check_balance
+            return handle_check_balance(user_id)
 
     class TransactionHistoryTool(BaseTool):
         name: str = "transaction_history"
@@ -164,26 +121,24 @@ def create_tools(user_id: str = "user_default") -> List[BaseTool]:
             "Shows buys with symbol, amount, price, and timestamp."
         )
         args_schema: Type[BaseModel] = TransactionHistoryInput
+        _mcp: Any = None
 
         def _run(self, limit: int = 10) -> str:
-            try:
-                txs = get_transactions(user_id, limit)
-                if not txs:
-                    return "No transactions yet."
-                lines = ["Recent transactions:"]
-                for t in txs:
-                    lines.append(
-                        f"  {t['type']} {t['amount']:.8f} {t['symbol']} @ ${t['price']:,.2f} "
-                        f"(${t['usd_value']:,.2f}) - {t['timestamp']}"
-                    )
-                return "\n".join(lines)
-            except Exception as e:
-                return f"Error: {str(e)}"
+            if self._mcp:
+                return _mcp_text(self._mcp.call_tool("transaction_history", {"limit": limit}))
+            from mcp_server.handlers import handle_transaction_history
+            return handle_transaction_history(user_id, limit)
 
-    return [
+    tools = [
         GetCryptoPriceTool(),
         GetOrderbookTool(),
         BuyCryptoTool(),
         CheckBalanceTool(),
         TransactionHistoryTool(),
     ]
+
+    if mcp_server is not None:
+        for t in tools:
+            t._mcp = mcp_server
+
+    return tools

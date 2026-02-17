@@ -16,7 +16,8 @@ const highLevelChart = `flowchart TD
   API["FastAPI Backend"]
   Agent["AI Agent (LangChain + Gemini)"]
   Tools["Agent Tools"]
-  CCXT["MCP Client (CCXT)"]
+  MCP["MCP Server (Simulator)"]
+  CCXT["CCXT Client"]
   Exchange["Crypto Exchange (Kraken/Binance)"]
   DB["MongoDB Database"]
 
@@ -24,12 +25,14 @@ const highLevelChart = `flowchart TD
   UI -->|"Send request"| API
   API -->|"Pass to agent"| Agent
   Agent -->|"Pick the right tool"| Tools
-  Tools -->|"Need market data?"| CCXT
+  Tools -->|"JSON-RPC request"| MCP
+  MCP -->|"Need market data?"| CCXT
   CCXT -->|"Fetch live prices"| Exchange
   Exchange -->|"Price data"| CCXT
-  CCXT -->|"Return data"| Tools
-  Tools -->|"Need wallet data?"| DB
-  DB -->|"Balance / history"| Tools
+  CCXT -->|"Return data"| MCP
+  MCP -->|"Need wallet data?"| DB
+  DB -->|"Balance / history"| MCP
+  MCP -->|"JSON-RPC response"| Tools
   Tools -->|"Tool result"| Agent
   Agent -->|"Natural language reply"| API
   API -->|"JSON response"| UI
@@ -227,7 +230,11 @@ export default function ArchitecturePage() {
               </div>
               <div className="arch-legend__item">
                 <span className="arch-legend__dot arch-legend__dot--orange" />
-                <span><strong>MCP Client (CCXT)</strong> &mdash; A wrapper around the CCXT library that connects to the exchange. The exchange is configurable &mdash; Kraken in production (US-friendly), Binance locally (Asia). No API key needed for public price data.</span>
+                <span><strong>MCP Server (Simulator)</strong> &mdash; An in-process server that speaks the MCP JSON-RPC protocol. Every tool call is logged as a structured request/response pair, visible in the MCP Inspector page.</span>
+              </div>
+              <div className="arch-legend__item">
+                <span className="arch-legend__dot arch-legend__dot--orange" />
+                <span><strong>CCXT Client</strong> &mdash; Library that connects to the exchange. The exchange is configurable &mdash; Kraken in production (US-friendly), Binance locally (Asia). No API key needed for public price data.</span>
               </div>
               <div className="arch-legend__item">
                 <span className="arch-legend__dot arch-legend__dot--purple" />

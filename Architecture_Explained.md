@@ -26,7 +26,7 @@ flowchart TD
   User(["🧑 You — Browser"])
 
   subgraph frontend ["🖥️ Frontend — Vercel"]
-    UI["React App\nChat · Wallet · Transactions"]
+    UI["React App\nChat · Wallet · Transactions · MCP Inspector"]
   end
 
   subgraph backend ["⚙️ Backend — Render"]
@@ -35,8 +35,12 @@ flowchart TD
     Tools["Agent Tools\nPrice · OrderBook · Buy · Balance · History"]
   end
 
+  subgraph mcp_layer ["🔌 MCP Protocol Layer"]
+    MCPSrv["MCP Server Simulator\nJSON-RPC 2.0 · Logged"]
+  end
+
   subgraph market ["📊 Market Data"]
-    CCXT["MCP Client\n(CCXT Library)"]
+    CCXT["CCXT Client"]
     Exchange[("Crypto Exchange\nKraken / Binance")]
   end
 
@@ -49,17 +53,19 @@ flowchart TD
   UI -->|"POST /chat"| API
   API -->|"Pass to agent"| Agent
   Agent -->|"Pick the right tool"| Tools
-  Tools -->|"Need market data?"| CCXT
+  Tools -->|"JSON-RPC request"| MCPSrv
+  MCPSrv -->|"Need market data?"| CCXT
   CCXT -->|"Fetch live prices"| Exchange
-  Tools -->|"Need wallet data?"| DB
+  MCPSrv -->|"Need wallet data?"| DB
 
   %% Response path (dotted arrows)
   Exchange -.->|"Price data"| CCXT
-  CCXT -.->|"Return data"| Tools
-  DB -.->|"Balance / history"| Tools
+  CCXT -.->|"Return data"| MCPSrv
+  DB -.->|"Balance / history"| MCPSrv
+  MCPSrv -.->|"JSON-RPC response"| Tools
   Tools -.->|"Tool result"| Agent
   Agent -.->|"Natural language reply"| API
-  API -.->|"JSON response"| UI
+  API -.->|"JSON response + steps"| UI
   UI -.->|"Show answer"| User
 
   %% Styling
@@ -68,24 +74,27 @@ flowchart TD
   style API fill:#FFE0B2,stroke:#F57C00,stroke-width:1.5px,color:#000
   style Agent fill:#E1BEE7,stroke:#7B1FA2,stroke-width:1.5px,color:#000
   style Tools fill:#FFF9C4,stroke:#F9A825,stroke-width:1.5px,color:#000
+  style MCPSrv fill:#DCEDC8,stroke:#689F38,stroke-width:1.5px,color:#000
   style CCXT fill:#B2EBF2,stroke:#0097A7,stroke-width:1.5px,color:#000
   style Exchange fill:#FFF9C4,stroke:#F57F17,stroke-width:1.5px,color:#000
   style DB fill:#F8BBD0,stroke:#C2185B,stroke-width:1.5px,color:#000
   style frontend fill:#f0faf0,stroke:#388E3C,stroke-dasharray:5 5
   style backend fill:#fff8f0,stroke:#F57C00,stroke-dasharray:5 5
+  style mcp_layer fill:#f5faf0,stroke:#689F38,stroke-dasharray:5 5
   style market fill:#f0fafa,stroke:#0097A7,stroke-dasharray:5 5
   style storage fill:#fdf0f5,stroke:#C2185B,stroke-dasharray:5 5
 ```
 
 > **Solid arrows** = request path (your message going in) · **Dotted arrows** = response path (answer coming back)
 >
-> Left side handles *market data* (prices from the exchange) · Right side handles *user data* (wallet from MongoDB)
+> The new **MCP Protocol Layer** sits between Agent Tools and external services. Every tool call is formatted as a JSON-RPC 2.0 request/response and logged — visible in the **MCP Inspector** page.
 
 | Component | Description |
 |-----------|-------------|
-| **Frontend** | React app running in your browser (hosted on Vercel). Handles the chat UI, wallet display, and transaction history. Communicates with the backend via REST API calls. |
+| **Frontend** | React app running in your browser (hosted on Vercel). Handles the chat UI, wallet display, transaction history, and the new MCP Inspector page. |
 | **Backend + AI Agent** | Python FastAPI server (hosted on Render) with a LangChain agent powered by Gemini 2.5 Flash. The agent interprets your natural language and decides which tool to call. |
-| **MCP Client (CCXT)** | A wrapper around the CCXT library that connects to the exchange. The exchange is configurable — Kraken in production (US-friendly), Binance locally (Asia). No API key needed for public price data. |
+| **MCP Server (Simulator)** | An in-process server that speaks the MCP JSON-RPC 2.0 protocol. Every tool call is logged as a structured request/response pair, visible in the MCP Inspector page. |
+| **CCXT Client** | Library that connects to the exchange. Configurable — Kraken in production (US-friendly), Binance locally (Asia). No API key needed for public price data. |
 | **MongoDB Atlas** | Cloud database (free M0 tier) that persists your simulated wallet balance and transaction history across sessions. |
 
 ---
