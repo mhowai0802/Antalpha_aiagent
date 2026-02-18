@@ -8,9 +8,22 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import AzureChatOpenAI
 
 from agent.tools import create_tools
+from mcp_server.registry import create_mcp_server
+from mcp_server.bridge import MCPBridge
 
 
-def create_crypto_agent(user_id: str = "user_default"):
+class AgentWithMCP:
+    """Thin wrapper that pairs an AgentExecutor with its MCP bridge."""
+
+    def __init__(self, executor: AgentExecutor, mcp_server: MCPBridge):
+        self.executor = executor
+        self.mcp_server = mcp_server
+
+    def invoke(self, *args, **kwargs):
+        return self.executor.invoke(*args, **kwargs)
+
+
+def create_crypto_agent(user_id: str = "user_default") -> AgentWithMCP:
     """Create crypto trading agent with tools bound to user_id."""
     api_key = os.getenv("HKBU_API_KEY")
     base_url = os.getenv("HKBU_BASE_URL", "https://genai.hkbu.edu.hk/api/v0/rest")
@@ -29,7 +42,8 @@ def create_crypto_agent(user_id: str = "user_default"):
         streaming=False,
     )
 
-    tools = create_tools(user_id)
+    mcp = create_mcp_server(user_id)
+    tools = create_tools(user_id, mcp)
 
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -59,7 +73,8 @@ Rules:
         verbose=True,
         handle_parsing_errors=True,
         max_iterations=10,
+        return_intermediate_steps=True,
     )
     executor.agent.stream_runnable = False
 
-    return executor
+    return AgentWithMCP(executor, mcp)

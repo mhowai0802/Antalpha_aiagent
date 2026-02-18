@@ -16,7 +16,8 @@ const highLevelChart = `flowchart TD
   API["FastAPI Backend"]
   Agent["AI Agent (LangChain + Gemini)"]
   Tools["Agent Tools"]
-  CCXT["MCP Client (CCXT)"]
+  MCP["MCP Server (FastMCP + Bridge)"]
+  CCXT["CCXT Client"]
   Exchange["Crypto Exchange (Kraken/Binance)"]
   DB["MongoDB Database"]
 
@@ -24,12 +25,14 @@ const highLevelChart = `flowchart TD
   UI -->|"Send request"| API
   API -->|"Pass to agent"| Agent
   Agent -->|"Pick the right tool"| Tools
-  Tools -->|"Need market data?"| CCXT
+  Tools -->|"JSON-RPC request"| MCP
+  MCP -->|"Need market data?"| CCXT
   CCXT -->|"Fetch live prices"| Exchange
   Exchange -->|"Price data"| CCXT
-  CCXT -->|"Return data"| Tools
-  Tools -->|"Need wallet data?"| DB
-  DB -->|"Balance / history"| Tools
+  CCXT -->|"Return data"| MCP
+  MCP -->|"Need wallet data?"| DB
+  DB -->|"Balance / history"| MCP
+  MCP -->|"JSON-RPC response"| Tools
   Tools -->|"Tool result"| Agent
   Agent -->|"Natural language reply"| API
   API -->|"JSON response"| UI
@@ -272,7 +275,11 @@ export default function ArchitecturePage() {
               </div>
               <div className="arch-legend__item">
                 <span className="arch-legend__dot arch-legend__dot--orange" />
-                <span><strong>MCP Client (CCXT)</strong> &mdash; A wrapper around the CCXT library that connects to the exchange. The exchange is configurable &mdash; Kraken in production (US-friendly), Binance locally (Asia). No API key needed for public price data.</span>
+                <span><strong>MCP Server (FastMCP + Bridge)</strong> &mdash; A real FastMCP server with an in-process bridge that speaks the MCP JSON-RPC protocol. Tools are defined once via <code>@mcp.tool()</code> decorators, return structured responses, and every call is logged as a JSON-RPC request/response pair visible in the MCP Inspector page. External MCP clients can also connect via SSE.</span>
+              </div>
+              <div className="arch-legend__item">
+                <span className="arch-legend__dot arch-legend__dot--orange" />
+                <span><strong>CCXT Client</strong> &mdash; Library that connects to the exchange. The exchange is configurable &mdash; Kraken in production (US-friendly), Binance locally (Asia). No API key needed for public price data.</span>
               </div>
               <div className="arch-legend__item">
                 <span className="arch-legend__dot arch-legend__dot--purple" />
@@ -477,7 +484,7 @@ export default function ArchitecturePage() {
               </div>
               <div className="arch-stack__row">
                 <span className="arch-stack__label">Backend</span>
-                <span className="arch-stack__value">Python, FastAPI, LangChain</span>
+                <span className="arch-stack__value">Python, FastAPI, LangChain, FastMCP</span>
               </div>
               <div className="arch-stack__row">
                 <span className="arch-stack__label">AI Model</span>

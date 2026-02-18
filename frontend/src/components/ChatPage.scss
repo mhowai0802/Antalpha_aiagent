@@ -71,6 +71,20 @@
   gap: 12px;
 }
 
+// Each message row — both sides align right
+.chat-row {
+  display: flex;
+  flex-direction: column;
+
+  &--user {
+    align-items: flex-start;
+  }
+
+  &--agent {
+    align-items: flex-end;
+  }
+}
+
 .chat-bubble {
   padding: 10px 14px;
   font-size: 14px;
@@ -79,19 +93,18 @@
   word-break: break-word;
 
   &--user {
-    align-self: flex-end;
-    max-width: 80%;
-    border-radius: 16px 16px 4px 16px;
+    max-width: 75%;
+    border-radius: 16px 16px 16px 4px;
     background: #2563eb;
     color: #fff;
   }
 
   &--agent {
-    align-self: flex-start;
     max-width: 85%;
-    border-radius: 16px 16px 16px 4px;
+    border-radius: 16px 16px 4px 16px;
     background: #2a2a2a;
     color: #ddd;
+    border: 1px solid #333;
 
     p {
       margin: 4px 0;
@@ -118,15 +131,27 @@
       font-size: 13px;
     }
   }
+
+  &__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #7dd3fc;
+    margin-bottom: 4px;
+  }
 }
 
 .chat-thinking {
-  align-self: flex-start;
   padding: 10px 14px;
-  border-radius: 16px;
+  border-radius: 16px 16px 4px 16px;
   background: #2a2a2a;
   color: #888;
   font-size: 14px;
+  border: 1px solid #333;
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -189,6 +214,159 @@
   }
 }
 
+// ── Agent reasoning panel ─────────────────────────────────────
+
+.reasoning {
+  align-self: flex-end;
+  max-width: 90%;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+// ── Translation pipeline (left→right chat style) ──────────────
+
+.pipeline {
+  background: #1c1c1c;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+// One row: label + [left] → [right]
+.prow {
+  &__label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #777;
+    margin-bottom: 4px;
+  }
+
+  &__columns {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  &__cell {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border-left: 3px solid #444;
+    font-size: 12px;
+    color: #ccc;
+    line-height: 1.5;
+  }
+
+  &__cell--left {
+    background: #1e2a3a;
+    border-radius: 10px 4px 4px 10px;
+  }
+
+  &__cell--right {
+    background: #1e2b1e;
+    border-radius: 4px 10px 10px 4px;
+  }
+
+  &__arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    color: #555;
+    flex-shrink: 0;
+  }
+
+  &__quote {
+    font-style: italic;
+    color: #ddd;
+  }
+
+  &__kv {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    margin-bottom: 2px;
+  }
+
+  &__key {
+    font-size: 11px;
+    color: #888;
+    flex-shrink: 0;
+  }
+
+  &__val {
+    font-size: 11px;
+    color: #7dd3fc;
+    background: #222;
+    padding: 1px 5px;
+    border-radius: 3px;
+    word-break: break-all;
+  }
+
+  &__json {
+    font-size: 10px;
+    line-height: 1.4;
+    color: #aaa;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+    background: #181818;
+    border-radius: 5px;
+    padding: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  &__json--compact {
+    max-height: 90px;
+  }
+
+  &__detail {
+    margin-top: 6px;
+  }
+
+  &__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    color: #666;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 4px;
+
+    &:hover {
+      color: #aaa;
+      background: rgba(255, 255, 255, 0.05);
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .prow__columns {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .prow__arrow {
+    transform: rotate(90deg);
+    padding: 2px 0;
+    justify-content: center;
+  }
+
+  .prow__cell--left,
+  .prow__cell--right {
+    border-radius: 8px;
+  }
+}
+
 @media (max-width: 768px) {
   .chat-header {
     display: none;
@@ -206,11 +384,11 @@
     font-size: 14px;
 
     &--user {
-      max-width: 88%;
+      max-width: 90%;
     }
 
     &--agent {
-      max-width: 92%;
+      max-width: 95%;
     }
   }
 
