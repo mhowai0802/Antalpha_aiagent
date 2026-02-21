@@ -280,8 +280,10 @@ render logs --resources <service-id> --limit 30
 
 ## Current Live URLs
 
+> **Not currently deployed.** Follow Steps 1–3 above to redeploy, then fill in the URLs below.
+
 | Service | URL |
 |---------|-----|
-| Frontend | https://crypto-agent-frontend-blond.vercel.app |
-| Backend | https://crypto-agent-backend-oyyf.onrender.com |
-| Health Check | https://crypto-agent-backend-oyyf.onrender.com/health |
+| Frontend | `https://<project-name>.vercel.app` |
+| Backend | `https://<service-name>.onrender.com` |
+| Health Check | `https://<service-name>.onrender.com/health` |
