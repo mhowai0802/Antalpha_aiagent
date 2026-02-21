@@ -92,6 +92,51 @@ const buyFlowChart = `sequenceDiagram
   UI-->>You: Show confirmation
   Note over UI: Auto-refresh wallet and transactions`;
 
+/* Proposed flow with AI Translator and MCP I/O */
+const proposedFlowChart = `flowchart TD
+  User["🧑 You (Browser)"]
+  UI["React Frontend"]
+  API["FastAPI Backend"]
+  Translator["AI Translator\n(User Q → Standardized Format)"]
+  Agent["AI Agent"]
+  Tools["Agent Tools"]
+  MCPServer["MCP Server\n(Real or Simulated)"]
+  Exchange["Exchange API"]
+  DB["MongoDB"]
+
+  User -->|"Type message"| UI
+  UI -->|"POST /chat"| API
+  API -->|"1. Translate"| Translator
+  Translator -->|"Standardized tool call"| Agent
+  Translator -.->|"Show in UI"| UI
+  Agent -->|"2. Pick tool"| Tools
+  Tools -->|"3. MCP tools/call"| MCPServer
+  MCPServer -->|"Need market?"| Exchange
+  MCPServer -->|"Need wallet?"| DB
+  MCPServer -.->|"MCP response"| Tools
+  Tools -.->|"Show in UI"| UI
+  Agent -.->|"Natural reply"| API
+  API -.->|"JSON + translation + MCP I/O"| UI
+  UI -.->|"Display"| User`;
+
+const mcpExampleChart = `sequenceDiagram
+  participant User
+  participant UI
+  participant Translator as AI Translator
+  participant Agent
+  participant MCP as MCP Server
+
+  User->>UI: "What's the price of BTC?"
+  UI->>Translator: User message
+  Translator->>Translator: Standardize to MCP format
+  Note over Translator: Output: {"tool":"get_crypto_price","arguments":{"symbol":"BTC"}}
+  Translator-->>UI: Show translation in UI
+  Translator->>Agent: Standardized input
+  Agent->>MCP: tools/call {"name":"get_crypto_price","arguments":{"symbol":"BTC"}}
+  MCP-->>Agent: {"content":[{"type":"text","text":"BTC/USDT: $68,887.90"}]}
+  MCP-->>UI: Show MCP input/output in UI
+  Agent-->>UI: Natural language reply`;
+
 const deploymentChart = `flowchart LR
   subgraph user [User]
     Browser["Browser"]
@@ -239,6 +284,64 @@ export default function ArchitecturePage() {
               <div className="arch-legend__item">
                 <span className="arch-legend__dot arch-legend__dot--purple" />
                 <span><strong>MongoDB Atlas</strong> &mdash; Cloud database (free M0 tier) that persists your simulated wallet balance and transaction history across sessions.</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Section 2b: Proposed Enhancement - AI Translation + MCP I/O */}
+        <section className="arch-section arch-section--proposed">
+          <h2 className="arch-section__title">Proposed Enhancement: AI Translation + MCP I/O</h2>
+          <p className="arch-text arch-text--muted">
+            The flowchart below shows how the system could be extended with an <strong>AI Translator</strong> that
+            converts user questions into a standardized format (MCP-compatible), and how the UI could display
+            both the translation and MCP server input/output for transparency.
+          </p>
+          <div className="arch-card arch-card--diagram">
+            <Mermaid chart={proposedFlowChart} />
+          </div>
+          <div className="arch-card">
+            <p className="arch-text" style={{ marginBottom: 12 }}>
+              <strong>New components:</strong>
+            </p>
+            <ul className="arch-ol" style={{ listStyle: 'disc', paddingLeft: 20 }}>
+              <li><strong>AI Translator</strong> &mdash; Converts natural language to standardized format, e.g. &ldquo;What&rsquo;s the price of BTC?&rdquo; → <code className="arch-code">{'{"tool":"get_crypto_price","arguments":{"symbol":"BTC"}}'}</code></li>
+              <li><strong>MCP Server</strong> &mdash; Accepts standardized <code className="arch-code">tools/call</code> requests and returns structured responses. Can be real (CCXT) or simulated for demo.</li>
+              <li><strong>UI Panels</strong> &mdash; Translation panel and MCP I/O panel show the intermediate steps in the UI.</li>
+            </ul>
+          </div>
+          <div className="arch-card arch-card--diagram">
+            <Mermaid chart={mcpExampleChart} />
+          </div>
+          <div className="arch-card">
+            <h3 className="arch-subtitle">Simulated MCP Input/Output</h3>
+            <p className="arch-text" style={{ marginBottom: 12 }}>
+              When you ask &ldquo;What&rsquo;s the price of BTC?&rdquo;, the MCP flow would look like:
+            </p>
+            <div className="arch-mcp-demo">
+              <div className="arch-mcp-demo__block">
+                <div className="arch-mcp-demo__label">MCP Input (tools/call)</div>
+                <pre className="arch-mcp-demo__code">{`{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "get_crypto_price",
+    "arguments": { "symbol": "BTC" }
+  }
+}`}</pre>
+              </div>
+              <div className="arch-mcp-demo__arrow">→</div>
+              <div className="arch-mcp-demo__block">
+                <div className="arch-mcp-demo__label">MCP Output (simulated)</div>
+                <pre className="arch-mcp-demo__code">{`{
+  "content": [
+    {
+      "type": "text",
+      "text": "BTC/USDT: $68,887.90 (simulated)"
+    }
+  ],
+  "isError": false
+}`}</pre>
               </div>
             </div>
           </div>

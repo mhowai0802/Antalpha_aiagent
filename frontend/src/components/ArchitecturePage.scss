@@ -110,6 +110,77 @@
   }
 }
 
+/* Code inline */
+.arch-code {
+  background: #333;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #a5d6ff;
+  font-family: ui-monospace, monospace;
+}
+
+/* Subtitle */
+.arch-subtitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ddd;
+  margin: 0 0 12px 0;
+}
+
+/* Proposed section highlight */
+.arch-section--proposed {
+  .arch-card {
+    border-color: #3b82f6;
+    background: #1e293b;
+  }
+}
+
+/* MCP demo input/output blocks */
+.arch-mcp-demo {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  flex-wrap: wrap;
+
+  &__block {
+    flex: 1;
+    min-width: 200px;
+    background: #1a1a1a;
+    border: 1px solid #404040;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  &__label {
+    padding: 8px 12px;
+    background: #2a2a2a;
+    font-size: 12px;
+    font-weight: 600;
+    color: #94a3b8;
+    border-bottom: 1px solid #333;
+  }
+
+  &__code {
+    margin: 0;
+    padding: 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #e2e8f0;
+    font-family: ui-monospace, monospace;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  &__arrow {
+    display: flex;
+    align-items: center;
+    font-size: 20px;
+    color: #64748b;
+    flex-shrink: 0;
+  }
+}
+
 /* Ordered list */
 .arch-ol {
   margin: 0;
@@ -324,5 +395,13 @@
   .arch-stack__value {
     text-align: left;
     font-size: 12px;
+  }
+
+  .arch-mcp-demo {
+    flex-direction: column;
+
+    &__arrow {
+      transform: rotate(90deg);
+    }
   }
 }
